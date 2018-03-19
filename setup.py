@@ -34,7 +34,7 @@ setup(
     author_email='jhunk@stsci.edu',
     description='A utility to display the timeline of a Conda channel',
     license='BSD',
-    url='https://github.com/jhunkeler/firewatch',
+    url='https://github.com/astroconda/firewatch',
     classifiers=[
         'Intended Audience :: System Administrators',
         'License :: OSI Approved :: BSD License',
