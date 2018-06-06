@@ -189,7 +189,14 @@ def main():
                         help=f'i[{"|".join([x for x in time_units.keys()])}]'
                         ' (120s, 12h, 1d, 2w, 3m, 4y)')
 
+    parser.add_argument('--version', '-V', action='store_true',
+                        help='Display software version')
     args = parser.parse_args()
+
+    if args.version:
+        from . import __version__
+        print(__version__)
+        exit(0)
 
     order = False  # Ascending
     if args.order != 'asc':
