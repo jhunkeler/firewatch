@@ -1,15 +1,26 @@
-import errno
 import json
 import platform as PLATFORM
 import requests
+import signal
 import sys
 import time
 from datetime import datetime, timedelta
 
+# Ignore broken pipe (*nix)
+if not sys.platform.startswith('win'):
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+conda_channel_pool_deprecated = [
+    f'https://repo.continuum.io/pkgs/archive',  # deprecated: dead packages
+    f'https://repo.continuum.io/pkgs/free',  # deprecated: conda<4.3.30
+]
+
+conda_channel_pool_r = [
+    f'https://repo.continuum.io/pkgs/r',
+]
 
 conda_channel_pool = [
     f'https://repo.continuum.io/pkgs/main',
-    # f'https://repo.continuum.io/pkgs/free',  # deprecated: conda<4.3.30
 ]
 
 time_units = dict(
@@ -175,16 +186,20 @@ def main():
     parser.add_argument('--brute-force', action='store_true',
                         help='Derive timestamps from HTTP header: "last-modified"')
 
-    parser.add_argument('--channel', '-c', default=conda_channel_pool,
+    parser.add_argument('--channel', '-c', default=[],
                         action='append', dest='channels', help='Conda channel')
+
+    parser.add_argument('--deprecated', '-d', action='store_true',
+                        help='Enable deprecated Anaconda, Inc. channel(s)')
 
     parser.add_argument('--order', '-o', default='asc', help='[asc|dsc]')
 
-    parser.add_argument('--platform', '-p', default=[get_platform()],
+    parser.add_argument('--platform', '-p', default=[],
                         action='append', dest='platforms',
                         help=f'[{"|".join(system_map.values())}]'
                              f'-[{"|".join(machine_map.values())}]')
-
+    parser.add_argument('--r-lang', '-R', action='store_true',
+                        help='Enable R channels')
     parser.add_argument('--time-span', '-t', default='1c',
                         help=f'i[{"|".join([x for x in time_units.keys()])}]'
                         ' (120s, 12h, 1d, 2w, 3m, 4y)')
@@ -205,7 +220,20 @@ def main():
     if args.benchmark:
         timer_start = time.time()
 
+    if not args.platforms:
+        args.platforms += [get_platform()]
+
     channels = list()
+
+    if not args.channels:
+        args.channels += conda_channel_pool
+
+    if args.deprecated:
+        args.channels += conda_channel_pool_deprecated
+
+    if args.r_lang:
+        args.channels += conda_channel_pool_r
+
     for platform in set(args.platforms):
         channels.extend([convert_channel(x, platform) for x in args.channels])
         channels.extend([convert_channel(x, platform, noarch=True)
@@ -226,20 +254,18 @@ def main():
     print('#{:<20s} {:<{channel_width}s}  {:<40s}'.format(
           'date', 'channel', 'package', channel_width=channel_width))
 
-    try:
-        for info in timestamps:
-            name = info['name']
-            ts = info['timestamp']
-            chn = info['channel']
+    for info in timestamps:
+        name = info['name']
+        ts = info['timestamp']
+        chn = info['channel']
 
-            tstr = ts.isoformat()
-            if span_delta < ts:
+        tstr = ts.isoformat()
+        if span_delta < ts:
+            try:
                 print(f'{tstr:<20s}: {chn:<{channel_width}s}: {name:<40s}')
-    except IOError as e:
-        # Broken pipe on '|head'
-        # TODO: Figure out why
-        if e.errno == errno.EPIPE:
-            pass
+            except BrokenPipeError:
+                # Ignore broken pipe (Windows)
+                pass
 
 
 if __name__ == '__main__':
